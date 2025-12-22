@@ -1,0 +1,78 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: analytics-postgres
+    environment:
+      POSTGRES_USER: analytics_user
+      POSTGRES_PASSWORD: analytics_pass
+      POSTGRES_DB: analytics_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U analytics_user -d analytics_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: analytics-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: analytics-backend
+    ports:
+      - "3001:3001"
+    environment:
+      NODE_ENV: development
+      PORT: 3001
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: analytics_user
+      DB_PASSWORD: analytics_pass
+      DB_NAME: analytics_db
+      DATABASE_URL: postgresql://analytics_user:analytics_pass@postgres:5432/analytics_db
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_URL: redis://redis:6379
+      CORS_ORIGIN: http://localhost:5173
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/prisma:/app/prisma
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: analytics-web
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_URL: http://localhost:3001/api
+    depends_on:
+      - backend
+    volumes:
+      - ./web/src:/app/src
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

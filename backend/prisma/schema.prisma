@@ -1,0 +1,78 @@
+// Analytics Platform Data Model
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Tenant {
+  id        String   @id @default(uuid())
+  name      String
+  region    String   // e.g., "us-east-1", "eu-west-1", "ap-southeast-1"
+  plan      String   // e.g., "free", "pro", "enterprise"
+  createdAt DateTime @default(now())
+
+  users   User[]
+  events  Event[]
+  metrics Metric[]
+
+  @@index([region])
+  @@index([plan])
+  @@map("tenants")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  tenantId  String
+  email     String
+  role      String   // e.g., "admin", "user", "viewer"
+  createdAt DateTime @default(now())
+
+  tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  events Event[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@index([createdAt])
+  @@map("users")
+}
+
+model Event {
+  id        String   @id @default(uuid())
+  tenantId  String
+  userId    String?
+  sessionId String
+  eventType String   // e.g., "page_view", "button_click", "filter_applied", "dashboard_loaded", "export_csv"
+  timestamp DateTime @default(now())
+  metadata  Json?    // { page, feature, button, value, country, device }
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, timestamp(sort: Desc)])
+  @@index([tenantId, eventType, timestamp(sort: Desc)])
+  @@index([sessionId])
+  @@index([timestamp(sort: Desc)])
+  @@index([eventType])
+  @@map("events")
+}
+
+model Metric {
+  id          String   @id @default(uuid())
+  tenantId    String
+  serviceName String   // e.g., "api", "worker", "frontend"
+  metricName  String   // e.g., "api_latency_ms_p95", "api_latency_ms_p99", "error_rate", "cpu_usage", "memory_mb", "requests_per_sec"
+  timestamp   DateTime @default(now())
+  value       Float
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, timestamp(sort: Desc)])
+  @@index([tenantId, serviceName, metricName, timestamp(sort: Desc)])
+  @@index([metricName, timestamp(sort: Desc)])
+  @@map("metrics")
+}
+

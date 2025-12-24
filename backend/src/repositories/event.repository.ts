@@ -76,6 +76,7 @@ export class EventRepository {
    */
   async findAll(query: EventsQueryDto): Promise<[any[], number]> {
     const {
+      tenantId,
       startDate,
       endDate,
       eventType,
@@ -87,11 +88,16 @@ export class EventRepository {
 
     const where: any = {};
 
+    // Filter by tenant for multi-tenancy
+    if (tenantId) {
+      where.tenantId = tenantId;
+    }
+
     if (startDate && endDate) {
       // Parse dates as UTC to avoid timezone issues
       where.timestamp = {
         gte: new Date(startDate + 'T00:00:00Z'),
-        lte: new Date(endDate + 'T00:00:00Z'),
+        lte: new Date(endDate + 'T23:59:59.999Z'),
       };
     }
     if (eventType) {

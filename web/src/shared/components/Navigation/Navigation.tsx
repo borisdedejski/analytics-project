@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Group, Button, Container, Burger, Drawer, Menu, Avatar, Text } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconChartBar, IconRocket, IconActivity, IconLogout, IconUserCircle, IconSwitchHorizontal, IconFlame } from '@tabler/icons-react';
+import { IconChartBar, IconRocket, IconActivity, IconLogout, IconUserCircle, IconSwitchHorizontal, IconFlame, IconChartLine, IconBolt } from '@tabler/icons-react';
 import { useAuthStore } from '@/store/authStore';
 import classes from './Navigation.module.scss';
 
@@ -57,6 +57,26 @@ export const Navigation = () => {
       >
         High Load Demo
       </Button>
+      <Button
+        component={Link}
+        to="/event-log"
+        variant={isActive('/event-log') ? 'filled' : 'subtle'}
+        leftSection={<IconChartLine size={20} />}
+        className={classes.navButton}
+        onClick={close}
+      >
+        Event Log
+      </Button>
+      <Button
+        component={Link}
+        to="/real-time-stream"
+        variant={isActive('/real-time-stream') ? 'filled' : 'subtle'}
+        leftSection={<IconBolt size={20} />}
+        className={classes.navButton}
+        onClick={close}
+      >
+        Real-Time Stream
+      </Button>
     </>
   );
 
@@ -64,7 +84,13 @@ export const Navigation = () => {
     <nav className={classes.navigation}>
       <Container size="xl">
         <Group justify="space-between" className={classes.navGroup}>
-          <Group gap="xs" className={classes.logo}>
+          <Group
+            gap="xs"
+            className={classes.logo}
+            component={Link}
+            to="/dashboard"
+            style={{ textDecoration: 'none', color: 'inherit' }}
+          >
             <IconActivity size={32} color="var(--mantine-color-blue-6)" />
             <span className={classes.logoText}>Analytics Platform</span>
           </Group>

@@ -4,6 +4,8 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Dashboard } from '@/pages/Dashboard/Dashboard';
 import { EventGenerator } from '@/pages/EventGenerator/EventGenerator';
 import { HighLoadDemo } from '@/pages/HighLoadDemo/HighLoadDemo';
+import { EventLog } from '@/pages/EventLog/EventLog';
+import { RealTimeStream } from '@/pages/RealTimeStream/RealTimeStream';
 import { Login } from '@/pages/Login/Login';
 import { Navigation } from '@/shared/components/Navigation/Navigation';
 import { useAuthStore } from '@/store/authStore';
@@ -63,6 +65,22 @@ export const App = () => {
               element={
                 <ProtectedRoute>
                   <HighLoadDemo />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/event-log"
+              element={
+                <ProtectedRoute>
+                  <EventLog />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/real-time-stream"
+              element={
+                <ProtectedRoute>
+                  <RealTimeStream />
                 </ProtectedRoute>
               }
             />

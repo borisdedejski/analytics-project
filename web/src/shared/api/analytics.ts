@@ -10,6 +10,22 @@ export interface GetAnalyticsParams {
   groupBy?: 'hour' | 'day' | 'week' | 'month';
 }
 
+export interface GetPaginatedAnalyticsParams extends GetAnalyticsParams {
+  cursor?: string;
+  limit?: number;
+}
+
+export interface PaginatedAnalyticsResponse {
+  data: AnalyticsSummaryDto;
+  pagination: {
+    cursor: string | null;
+    nextCursor: string | null;
+    hasMore: boolean;
+    limit: number;
+    total: number;
+  };
+}
+
 /**
  * Custom error class for validation errors
  */
@@ -143,6 +159,100 @@ export const analyticsApi = {
       console.error('Failed to clear cache:', error);
       throw error;
     }
+  },
+
+  /**
+   * Fetches paginated analytics summary with cursor-based pagination
+   */
+  async getPaginatedSummary(params: GetPaginatedAnalyticsParams): Promise<PaginatedAnalyticsResponse> {
+    const { tenantId, startDate, endDate, groupBy, cursor, limit = 50 } = params;
+
+    try {
+      const headers: Record<string, string> = {};
+      if (tenantId) {
+        headers['x-tenant-id'] = tenantId;
+      }
+
+      const queryParams: Record<string, string> = {
+        startDate,
+        endDate,
+        limit: String(limit),
+      };
+
+      if (groupBy) {
+        queryParams.groupBy = groupBy;
+      }
+
+      if (cursor) {
+        queryParams.cursor = cursor;
+      }
+
+      const response = await apiClient.get<PaginatedAnalyticsResponse>(
+        '/analytics/summary/paginated',
+        queryParams,
+        headers
+      );
+
+      console.log('✅ Paginated analytics data fetched', {
+        hasMore: response.pagination.hasMore,
+        limit: response.pagination.limit,
+        total: response.pagination.total,
+      });
+
+      return response;
+    } catch (error) {
+      console.error('❌ Paginated analytics fetch failed:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Creates an EventSource for streaming analytics updates
+   * Returns a function to close the stream
+   */
+  createStreamConnection(
+    params: GetAnalyticsParams,
+    onData: (data: AnalyticsSummaryDto) => void,
+    onError?: (error: Error) => void
+  ): () => void {
+    const { tenantId, startDate, endDate, groupBy } = params;
+
+    const queryParams = new URLSearchParams({
+      startDate,
+      endDate,
+      ...(groupBy && { groupBy }),
+    });
+
+    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+    const url = `${baseUrl}/api/analytics/summary/stream?${queryParams}`;
+
+    const eventSource = new EventSource(url);
+
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        const validated = AnalyticsSummaryDtoSchema.parse(data);
+        onData(validated);
+      } catch (error) {
+        console.error('Error parsing stream data:', error);
+        if (onError) {
+          onError(error as Error);
+        }
+      }
+    };
+
+    eventSource.onerror = (error) => {
+      console.error('Stream error:', error);
+      if (onError) {
+        onError(new Error('Stream connection error'));
+      }
+      eventSource.close();
+    };
+
+    // Return cleanup function
+    return () => {
+      eventSource.close();
+    };
   },
 };
 

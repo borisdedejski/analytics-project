@@ -7,18 +7,6 @@ import {
 } from "../services/circuit-breaker.service";
 import cacheManager from "../services/cache-manager.service";
 
-/**
- * Enhanced Analytics Controller with Scalability Features
- * 
- * SCALABILITY IMPROVEMENTS:
- * - Circuit breaker for graceful failure handling
- * - High-load detection and graceful degradation
- * - Request prioritization based on system load
- * - Cursor-based pagination for large datasets
- * - Streaming responses for real-time data
- * - Cache statistics endpoint
- */
-
 export class EnhancedAnalyticsController {
   private analyticsService: AnalyticsService;
 
@@ -39,9 +27,9 @@ export class EnhancedAnalyticsController {
       const loadMetrics = highLoadHandler.getMetrics();
 
       if (!highLoadHandler.shouldAcceptRequest(priority)) {
-        res.status(503).json(
-          highLoadHandler.getFallbackResponse("analytics-summary")
-        );
+        res
+          .status(503)
+          .json(highLoadHandler.getFallbackResponse("analytics-summary"));
         highLoadHandler.recordRequest(Date.now() - startTime, false);
         return;
       }
@@ -57,7 +45,8 @@ export class EnhancedAnalyticsController {
       const query = {
         startDate: req.query.startDate as string,
         endDate: req.query.endDate as string,
-        groupBy: (req.query.groupBy as "hour" | "day" | "week" | "month") || "day",
+        groupBy:
+          (req.query.groupBy as "hour" | "day" | "week" | "month") || "day",
       };
 
       if (!query.startDate || !query.endDate) {
@@ -80,7 +69,7 @@ export class EnhancedAnalyticsController {
         // Fallback: return cached data or graceful degradation
         async () => {
           console.log("Using fallback response due to circuit breaker");
-          
+
           // Try to get any cached data, even if stale
           const cachedData = await cacheManager.get(
             "analytics",
@@ -129,7 +118,7 @@ export class EnhancedAnalyticsController {
     } catch (error) {
       isError = true;
       console.error("Enhanced analytics error:", error);
-      res.status(500).json({ 
+      res.status(500).json({
         error: "Failed to fetch analytics summary",
         loadLevel: highLoadHandler.getMetrics().level,
       });
@@ -214,7 +203,8 @@ export class EnhancedAnalyticsController {
       const query = {
         startDate: req.query.startDate as string,
         endDate: req.query.endDate as string,
-        groupBy: (req.query.groupBy as "hour" | "day" | "week" | "month") || "day",
+        groupBy:
+          (req.query.groupBy as "hour" | "day" | "week" | "month") || "day",
       };
 
       if (!query.startDate || !query.endDate) {
@@ -239,11 +229,12 @@ export class EnhancedAnalyticsController {
       // Send updates every 5 seconds
       const intervalId = setInterval(async () => {
         try {
-          const updatedSummary = await this.analyticsService.getAnalyticsSummary(
-            query,
-            tenantId,
-            true // Skip cache for real-time data
-          );
+          const updatedSummary =
+            await this.analyticsService.getAnalyticsSummary(
+              query,
+              tenantId,
+              true // Skip cache for real-time data
+            );
           res.write(`data: ${JSON.stringify(updatedSummary)}\n\n`);
         } catch (error) {
           console.error("Error streaming analytics:", error);
@@ -270,8 +261,8 @@ export class EnhancedAnalyticsController {
     try {
       const tenantId = req.headers["x-tenant-id"] as string | undefined;
       await this.analyticsService.clearCache(tenantId);
-      
-      res.json({ 
+
+      res.json({
         message: "Cache cleared successfully",
         tenantId: tenantId || "all",
       });
@@ -335,4 +326,3 @@ export class EnhancedAnalyticsController {
     }
   };
 }
-

@@ -25,6 +25,7 @@ export interface EventResponseDto {
 }
 
 export interface EventsQueryDto {
+  tenantId?: string;
   startDate?: string;
   endDate?: string;
   eventType?: string;

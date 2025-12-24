@@ -21,7 +21,11 @@ export class EventController {
 
   getEvents = async (req: Request, res: Response): Promise<void> => {
     try {
+      // Extract tenantId from headers (multi-tenancy)
+      const tenantId = req.headers['x-tenant-id'] as string | undefined;
+      
       const query = {
+        tenantId,
         startDate: req.query.startDate as string,
         endDate: req.query.endDate as string,
         eventType: req.query.eventType as string,
@@ -33,6 +37,7 @@ export class EventController {
       const result = await this.eventService.getEvents(query);
       res.json(result);
     } catch (error) {
+      console.error('Error fetching events:', error);
       res.status(500).json({ error: 'Failed to fetch events' });
     }
   };

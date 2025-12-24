@@ -14,8 +14,15 @@ export const eventsApi = {
    * Fetches events with runtime validation
    * Uses generated types from backend + Zod validation
    */
-  getEvents: async (params: EventsQueryDto): Promise<EventsResponse> => {
-    const data = await apiClient.get<EventsResponse>('/events', params);
+  getEvents: async (params: EventsQueryDto & { tenantId?: string }): Promise<EventsResponse> => {
+    const { tenantId, ...queryParams } = params;
+    
+    const headers: Record<string, string> = {};
+    if (tenantId) {
+      headers['x-tenant-id'] = tenantId;
+    }
+    
+    const data = await apiClient.get<EventsResponse>('/events', queryParams, headers);
     
     // Validate each event in the response
     const validatedEvents = data.events.map(event => 

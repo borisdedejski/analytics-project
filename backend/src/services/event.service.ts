@@ -4,7 +4,7 @@ import {
   EventResponseDto,
   EventsQueryDto,
 } from "../dtos/event.dto";
-import redisClient from "../config/redis";
+import cacheManager from "./cache-manager.service";
 
 export class EventService {
   private eventRepository: EventRepository;
@@ -16,7 +16,20 @@ export class EventService {
   async createEvent(data: CreateEventDto): Promise<EventResponseDto> {
     const event = await this.eventRepository.create(data);
 
-    await redisClient.del("analytics:summary:*");
+    // Smart cache invalidation - only invalidate relevant caches
+    // This is O(1) instead of O(N) with the old KEYS approach
+    try {
+      const eventDate = event.timestamp || new Date();
+      const tags = [
+        `tenant:${data.tenantId}`,
+        `date:${eventDate.toISOString().split("T")[0]}`,
+        `realtime`,
+      ];
+      await cacheManager.invalidateByTags(tags);
+    } catch (error) {
+      // Don't fail event creation if cache invalidation fails
+      console.error("Cache invalidation error:", error);
+    }
 
     return this.mapToDto(event);
   }

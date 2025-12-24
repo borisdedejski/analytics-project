@@ -1,0 +1,18 @@
+import type { Prisma } from '@prisma/client';
+
+import { z } from 'zod';
+import { StringWithAggregatesFilterSchema } from './StringWithAggregatesFilterSchema';
+import { DateTimeWithAggregatesFilterSchema } from './DateTimeWithAggregatesFilterSchema';
+
+export const TenantScalarWhereWithAggregatesInputSchema: z.ZodType<Prisma.TenantScalarWhereWithAggregatesInput> = z.strictObject({
+  AND: z.union([ z.lazy(() => TenantScalarWhereWithAggregatesInputSchema), z.lazy(() => TenantScalarWhereWithAggregatesInputSchema).array() ]).optional(),
+  OR: z.lazy(() => TenantScalarWhereWithAggregatesInputSchema).array().optional(),
+  NOT: z.union([ z.lazy(() => TenantScalarWhereWithAggregatesInputSchema), z.lazy(() => TenantScalarWhereWithAggregatesInputSchema).array() ]).optional(),
+  id: z.union([ z.lazy(() => StringWithAggregatesFilterSchema), z.string() ]).optional(),
+  name: z.union([ z.lazy(() => StringWithAggregatesFilterSchema), z.string() ]).optional(),
+  region: z.union([ z.lazy(() => StringWithAggregatesFilterSchema), z.string() ]).optional(),
+  plan: z.union([ z.lazy(() => StringWithAggregatesFilterSchema), z.string() ]).optional(),
+  createdAt: z.union([ z.lazy(() => DateTimeWithAggregatesFilterSchema), z.coerce.date() ]).optional(),
+});
+
+export default TenantScalarWhereWithAggregatesInputSchema;

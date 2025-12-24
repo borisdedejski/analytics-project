@@ -31,8 +31,20 @@ export class EventRepository {
       throw new Error(`Tenant with ID ${data.tenantId} not found. Please seed the database first.`);
     }
     
-    // Only use userId if it's a valid UUID format, otherwise store in metadata
+    // Only use userId if it's a valid UUID format AND the user exists
     const isValidUUID = data.userId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data.userId);
+    
+    let validUserId: string | null = null;
+    if (isValidUUID && data.userId) {
+      // Verify user exists in database
+      const userExists = await prisma.user.findUnique({
+        where: { id: data.userId },
+      });
+      
+      if (userExists) {
+        validUserId = data.userId;
+      }
+    }
 
     // Use provided timestamp or default to current time
     const eventTimestamp = data.timestamp ? new Date(data.timestamp) : new Date();
@@ -40,7 +52,7 @@ export class EventRepository {
     const event = await prisma.event.create({
       data: {
         tenantId: data.tenantId,
-        userId: isValidUUID ? data.userId : null, // Only set if it's a valid UUID
+        userId: validUserId, // Only set if user exists in database
         sessionId: data.sessionId || `session_${Date.now()}`,
         eventType: data.eventType,
         timestamp: eventTimestamp,
@@ -49,8 +61,8 @@ export class EventRepository {
           browser: data.browser,
           device: data.device,
           country: data.country,
-          // Store the user identifier in metadata if not a valid UUID
-          userIdentifier: !isValidUUID ? data.userId : undefined,
+          // Store the user identifier in metadata if not in database
+          userIdentifier: data.userId && !validUserId ? data.userId : undefined,
           ...data.metadata,
         },
       },
@@ -114,15 +126,21 @@ export class EventRepository {
   /**
    * Get event count grouped by event type
    */
-  async getEventCountByType(startDate: Date, endDate: Date) {
+  async getEventCountByType(startDate: Date, endDate: Date, tenantId?: string) {
+    const where: any = {
+      timestamp: {
+        gte: startDate,
+        lte: endDate,
+      },
+    };
+
+    if (tenantId) {
+      where.tenantId = tenantId;
+    }
+
     const results = await prisma.event.groupBy({
       by: ["eventType"],
-      where: {
-        timestamp: {
-          gte: startDate,
-          lte: endDate,
-        },
-      },
+      where,
       _count: {
         eventType: true,
       },
@@ -138,24 +156,43 @@ export class EventRepository {
   /**
    * Get time series data bucketed by interval
    */
-  async getTimeSeriesData(startDate: Date, endDate: Date, interval: string) {
+  async getTimeSeriesData(startDate: Date, endDate: Date, interval: string, tenantId?: string) {
     const truncFunc = interval === "hour" ? "hour" : "day";
 
     // Use raw SQL for time bucketing
-    const results = await prisma.$queryRaw<
-      Array<{ timestamp: Date; count: bigint }>
-    >(
-      Prisma.sql`
-        SELECT 
-          DATE_TRUNC(${Prisma.raw(`'${truncFunc}'`)}, timestamp) as timestamp,
-          COUNT(*) as count
-        FROM events
-        WHERE timestamp >= ${startDate}
-          AND timestamp <= ${endDate}
-        GROUP BY DATE_TRUNC(${Prisma.raw(`'${truncFunc}'`)}, timestamp)
-        ORDER BY timestamp ASC
-      `
-    );
+    let results;
+    if (tenantId) {
+      results = await prisma.$queryRaw<
+        Array<{ timestamp: Date; count: bigint }>
+      >(
+        Prisma.sql`
+          SELECT 
+            DATE_TRUNC(${Prisma.raw(`'${truncFunc}'`)}, timestamp) as timestamp,
+            COUNT(*) as count
+          FROM events
+          WHERE timestamp >= ${startDate}
+            AND timestamp <= ${endDate}
+            AND "tenantId" = ${tenantId}
+          GROUP BY DATE_TRUNC(${Prisma.raw(`'${truncFunc}'`)}, timestamp)
+          ORDER BY timestamp ASC
+        `
+      );
+    } else {
+      results = await prisma.$queryRaw<
+        Array<{ timestamp: Date; count: bigint }>
+      >(
+        Prisma.sql`
+          SELECT 
+            DATE_TRUNC(${Prisma.raw(`'${truncFunc}'`)}, timestamp) as timestamp,
+            COUNT(*) as count
+          FROM events
+          WHERE timestamp >= ${startDate}
+            AND timestamp <= ${endDate}
+          GROUP BY DATE_TRUNC(${Prisma.raw(`'${truncFunc}'`)}, timestamp)
+          ORDER BY timestamp ASC
+        `
+      );
+    }
 
     return results.map((r: any) => ({
       timestamp: r.timestamp.toISOString(),
@@ -166,15 +203,21 @@ export class EventRepository {
   /**
    * Get unique user count in date range
    */
-  async getUniqueUserCount(startDate: Date, endDate: Date): Promise<number> {
-    const result = await prisma.event.findMany({
-      where: {
-        timestamp: {
-          gte: startDate,
-          lte: endDate,
-        },
-        userId: { not: null },
+  async getUniqueUserCount(startDate: Date, endDate: Date, tenantId?: string): Promise<number> {
+    const where: any = {
+      timestamp: {
+        gte: startDate,
+        lte: endDate,
       },
+      userId: { not: null },
+    };
+
+    if (tenantId) {
+      where.tenantId = tenantId;
+    }
+
+    const result = await prisma.event.findMany({
+      where,
       select: { userId: true },
       distinct: ["userId"],
     });
@@ -185,22 +228,41 @@ export class EventRepository {
   /**
    * Get top pages by view count
    */
-  async getTopPages(startDate: Date, endDate: Date, limit: number = 10) {
+  async getTopPages(startDate: Date, endDate: Date, limit: number = 10, tenantId?: string) {
     // Pages are stored in metadata now
-    const results = await prisma.$queryRaw<
-      Array<{ page: string; views: bigint }>
-    >`
-      SELECT 
-        metadata->>'page' as page,
-        COUNT(*) as views
-      FROM events
-      WHERE timestamp >= ${startDate}
-        AND timestamp <= ${endDate}
-        AND metadata->>'page' IS NOT NULL
-      GROUP BY metadata->>'page'
-      ORDER BY views DESC
-      LIMIT ${limit}
-    `;
+    let results;
+    if (tenantId) {
+      results = await prisma.$queryRaw<
+        Array<{ page: string; views: bigint }>
+      >`
+        SELECT 
+          metadata->>'page' as page,
+          COUNT(*) as views
+        FROM events
+        WHERE timestamp >= ${startDate}
+          AND timestamp <= ${endDate}
+          AND "tenantId" = ${tenantId}
+          AND metadata->>'page' IS NOT NULL
+        GROUP BY metadata->>'page'
+        ORDER BY views DESC
+        LIMIT ${limit}
+      `;
+    } else {
+      results = await prisma.$queryRaw<
+        Array<{ page: string; views: bigint }>
+      >`
+        SELECT 
+          metadata->>'page' as page,
+          COUNT(*) as views
+        FROM events
+        WHERE timestamp >= ${startDate}
+          AND timestamp <= ${endDate}
+          AND metadata->>'page' IS NOT NULL
+        GROUP BY metadata->>'page'
+        ORDER BY views DESC
+        LIMIT ${limit}
+      `;
+    }
 
     return results.map((r: any) => ({
       page: r.page,
@@ -211,20 +273,37 @@ export class EventRepository {
   /**
    * Get device statistics
    */
-  async getDeviceStats(startDate: Date, endDate: Date) {
+  async getDeviceStats(startDate: Date, endDate: Date, tenantId?: string) {
     // Devices are stored in metadata now
-    const results = await prisma.$queryRaw<
-      Array<{ device: string; count: bigint }>
-    >`
-      SELECT 
-        metadata->>'device' as device,
-        COUNT(*) as count
-      FROM events
-      WHERE timestamp >= ${startDate}
-        AND timestamp <= ${endDate}
-        AND metadata->>'device' IS NOT NULL
-      GROUP BY metadata->>'device'
-    `;
+    let results;
+    if (tenantId) {
+      results = await prisma.$queryRaw<
+        Array<{ device: string; count: bigint }>
+      >`
+        SELECT 
+          metadata->>'device' as device,
+          COUNT(*) as count
+        FROM events
+        WHERE timestamp >= ${startDate}
+          AND timestamp <= ${endDate}
+          AND "tenantId" = ${tenantId}
+          AND metadata->>'device' IS NOT NULL
+        GROUP BY metadata->>'device'
+      `;
+    } else {
+      results = await prisma.$queryRaw<
+        Array<{ device: string; count: bigint }>
+      >`
+        SELECT 
+          metadata->>'device' as device,
+          COUNT(*) as count
+        FROM events
+        WHERE timestamp >= ${startDate}
+          AND timestamp <= ${endDate}
+          AND metadata->>'device' IS NOT NULL
+        GROUP BY metadata->>'device'
+      `;
+    }
 
     return results.map((r: any) => ({
       device: r.device,
@@ -235,19 +314,26 @@ export class EventRepository {
   /**
    * Get total event count in date range
    */
-  async getTotalCount(startDate: Date, endDate: Date): Promise<number> {
+  async getTotalCount(startDate: Date, endDate: Date, tenantId?: string): Promise<number> {
     console.log('EventRepository.getTotalCount - Query params:', {
       startDate: startDate.toISOString(),
       endDate: endDate.toISOString(),
+      tenantId,
     });
 
-    const count = await prisma.event.count({
-      where: {
-        timestamp: {
-          gte: startDate,
-          lte: endDate,
-        },
+    const where: any = {
+      timestamp: {
+        gte: startDate,
+        lte: endDate,
       },
+    };
+
+    if (tenantId) {
+      where.tenantId = tenantId;
+    }
+
+    const count = await prisma.event.count({
+      where,
     });
 
     console.log('EventRepository.getTotalCount - Result:', count);

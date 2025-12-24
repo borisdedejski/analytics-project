@@ -1,12 +1,13 @@
 import { useCallback } from 'react';
 import { Container } from '@mantine/core';
 import { Notifications, notifications } from '@mantine/notifications';
-import { IconCheck, IconX } from '@tabler/icons-react';
+import { IconCheck, IconX, IconAlertTriangle } from '@tabler/icons-react';
 import { DataStateHandler } from '@/shared/components/DataStateHandler/DataStateHandler';
 import { DashboardHeader } from './components/DashboardHeader/DashboardHeader';
 import { DashboardControls } from './components/DashboardControls/DashboardControls';
 import { DashboardContent } from './components/DashboardContent/DashboardContent';
 import { useDashboard } from './hooks/useDashboard.tsx';
+import { ValidationError } from '@/shared/api/analytics';
 import classes from './Dashboard.module.scss';
 
 export const Dashboard = () => {
@@ -30,7 +31,7 @@ export const Dashboard = () => {
     onSuccess: useCallback(() => {
       notifications.show({
         title: 'Success',
-        message: 'Analytics data refreshed successfully',
+        message: 'Analytics data refreshed and validated successfully ✓',
         color: 'green',
         icon: <IconCheck size={18} />,
         autoClose: 3000,
@@ -43,6 +44,15 @@ export const Dashboard = () => {
         color: 'red',
         icon: <IconX size={18} />,
         autoClose: 7000,
+      });
+    }, []),
+    onValidationError: useCallback((error: ValidationError) => {
+      notifications.show({
+        title: 'Data Validation Error',
+        message: `Backend response doesn't match expected format. ${error.zodError.errors.length} validation error(s) detected. Please contact support.`,
+        color: 'orange',
+        icon: <IconAlertTriangle size={18} />,
+        autoClose: 10000,
       });
     }, []),
   });

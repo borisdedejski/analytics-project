@@ -1,38 +1,32 @@
+/**
+ * Event Types
+ * 
+ * ⚠️ DEPRECATED: This file now re-exports from auto-generated types.
+ * 
+ * Types are auto-generated from backend DTOs. To update:
+ * 1. cd backend
+ * 2. npm run types:generate
+ * 
+ * See TYPE_GENERATION.md for more info.
+ */
+
 import { z } from 'zod';
 
-export const EventSchema = z.object({
-  id: z.string(),
-  eventType: z.string(),
-  userId: z.string().nullable().optional(),
-  sessionId: z.string().nullable().optional(),
-  metadata: z.record(z.any()).nullable().optional(),
-  page: z.string().nullable().optional(),
-  browser: z.string().nullable().optional(),
-  device: z.string().nullable().optional(),
-  country: z.string().nullable().optional(),
-  timestamp: z.string(),
-});
+// Re-export from generated types
+export {
+  EventResponseDtoSchema as EventSchema,
+  CreateEventDtoSchema,
+  type EventResponseDto as Event,
+  type CreateEventDto as CreateEventPayload,
+} from './generated/event.dto.zod';
 
+// Custom schemas for frontend-specific needs
 export const EventsResponseSchema = z.object({
-  events: z.array(EventSchema),
+  events: z.array(z.any()), // Will be validated individually
   total: z.number(),
   page: z.number(),
   limit: z.number(),
 });
 
-export type Event = z.infer<typeof EventSchema>;
 export type EventsResponse = z.infer<typeof EventsResponseSchema>;
-
-export interface CreateEventPayload {
-  tenantId?: string;
-  eventType: string;
-  userId?: string;
-  sessionId?: string;
-  timestamp?: string;
-  metadata?: Record<string, any>;
-  page?: string;
-  browser?: string;
-  device?: string;
-  country?: string;
-}
 

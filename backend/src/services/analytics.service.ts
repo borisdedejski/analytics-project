@@ -1,66 +1,89 @@
 import { EventRepository } from "../repositories/event.repository";
 import { AnalyticsQueryDto, AnalyticsSummaryDto } from "../dtos/analytics.dto";
-import redisClient from "../config/redis";
+import cacheManager from "./cache-manager.service";
 
 /**
- * AnalyticsService - Now using Prisma via EventRepository
+ * AnalyticsService - Enhanced with Smart Caching and Scalability
  *
- * This service maintains backward compatibility while using the new
- * Prisma-based repository under the hood.
+ * SCALABILITY IMPROVEMENTS:
+ * - Uses CacheManager with smart invalidation (no blocking KEYS operations)
+ * - Time-based cache tiering for optimal TTL
+ * - Tag-based cache invalidation for targeted updates
+ * - Supports multi-tenant isolation
+ * - Probabilistic cache stampede prevention
  */
 export class AnalyticsService {
   private eventRepository: EventRepository;
-  private readonly CACHE_TTL = 300;
+  private readonly CACHE_NAMESPACE = "analytics";
 
   constructor() {
     this.eventRepository = new EventRepository();
   }
 
   /**
-   * Clear all analytics cache
+   * Clear analytics cache using smart invalidation
    */
-  async clearCache(): Promise<void> {
-    const keys = await redisClient.keys('analytics:summary:*');
-    if (keys.length > 0) {
-      await Promise.all(keys.map(key => redisClient.del(key)));
+  async clearCache(tenantId?: string): Promise<void> {
+    if (tenantId) {
+      await cacheManager.invalidateByTenant(tenantId);
+    } else {
+      await cacheManager.invalidateByNamespace(this.CACHE_NAMESPACE);
     }
   }
 
   /**
-   * Get analytics summary - now powered by Prisma
+   * Invalidate cache when new events are created
+   */
+  async invalidateCacheForNewEvent(
+    tenantId: string,
+    eventDate: Date
+  ): Promise<void> {
+    // Invalidate by tags - much more efficient than scanning all keys
+    const tags = [
+      `tenant:${tenantId}`,
+      `date:${eventDate.toISOString().split("T")[0]}`,
+      `realtime`,
+    ];
+    await cacheManager.invalidateByTags(tags);
+  }
+
+  /**
+   * Get analytics summary with enhanced caching
    */
   async getAnalyticsSummary(
     query: AnalyticsQueryDto,
+    tenantId?: string,
     skipCache: boolean = false
   ): Promise<AnalyticsSummaryDto> {
-    const cacheKey = `analytics:summary:${query.startDate}:${query.endDate}:${
+    const cacheIdentifier = `summary:${query.startDate}:${query.endDate}:${
       query.groupBy || "day"
     }`;
 
-    // Check cache only if not skipping
-    if (!skipCache) {
-      const cached = await redisClient.get(cacheKey);
-      if (cached) {
-        console.log('Returning cached analytics data');
-        return JSON.parse(cached);
-      }
-    } else {
-      console.log('Skipping cache, fetching fresh data');
-    }
-
-    // Parse dates as UTC to avoid timezone issues
-    // Adding 'T00:00:00Z' ensures consistent UTC parsing
-    const startDate = new Date(query.startDate + 'T00:00:00Z');
-    const endDate = new Date(query.endDate + 'T00:00:00Z');
+    const startDate = new Date(query.startDate + "T00:00:00Z");
+    const endDate = new Date(query.endDate + "T00:00:00Z");
     const groupBy = query.groupBy || "day";
 
-    console.log('Analytics Service - Date Processing:', {
-      queryStartDate: query.startDate,
-      queryEndDate: query.endDate,
-      parsedStartDate: startDate.toISOString(),
-      parsedEndDate: endDate.toISOString(),
-      groupBy
-    });
+    // Generate cache tags for smart invalidation
+    const tags = this.generateCacheTags(tenantId, startDate, endDate);
+
+    // Check cache only if not skipping
+    if (!skipCache) {
+      const cached = await cacheManager.get<AnalyticsSummaryDto>(
+        this.CACHE_NAMESPACE,
+        cacheIdentifier,
+        {
+          tenantId,
+          dateRange: { start: startDate, end: endDate },
+          tags,
+        }
+      );
+
+      if (cached) {
+        return cached;
+      }
+    } else {
+      console.log("Skipping cache, fetching fresh data");
+    }
 
     const [
       totalEvents,
@@ -70,12 +93,12 @@ export class AnalyticsService {
       topPages,
       deviceStats,
     ] = await Promise.all([
-      this.eventRepository.getTotalCount(startDate, endDate),
-      this.eventRepository.getUniqueUserCount(startDate, endDate),
-      this.eventRepository.getEventCountByType(startDate, endDate),
-      this.eventRepository.getTimeSeriesData(startDate, endDate, groupBy),
-      this.eventRepository.getTopPages(startDate, endDate, 10),
-      this.eventRepository.getDeviceStats(startDate, endDate),
+      this.eventRepository.getTotalCount(startDate, endDate, tenantId),
+      this.eventRepository.getUniqueUserCount(startDate, endDate, tenantId),
+      this.eventRepository.getEventCountByType(startDate, endDate, tenantId),
+      this.eventRepository.getTimeSeriesData(startDate, endDate, groupBy, tenantId),
+      this.eventRepository.getTopPages(startDate, endDate, 10, tenantId),
+      this.eventRepository.getDeviceStats(startDate, endDate, tenantId),
     ]);
 
     const totalDeviceCount = deviceStats.reduce(
@@ -109,8 +132,46 @@ export class AnalyticsService {
       deviceStats: deviceStatsWithPercentage,
     };
 
-    await redisClient.setEx(cacheKey, this.CACHE_TTL, JSON.stringify(summary));
+    // Cache with smart TTL and tags
+    await cacheManager.set(this.CACHE_NAMESPACE, cacheIdentifier, summary, {
+      tenantId,
+      dateRange: { start: startDate, end: endDate },
+      tags,
+    });
 
     return summary;
+  }
+
+  /**
+   * Generate cache tags for smart invalidation
+   */
+  private generateCacheTags(
+    tenantId: string | undefined,
+    startDate: Date,
+    endDate: Date
+  ): string[] {
+    const tags: string[] = [];
+
+    if (tenantId) {
+      tags.push(`tenant:${tenantId}`);
+    }
+
+    const startDateStr = startDate.toISOString().split("T")[0];
+    const endDateStr = endDate.toISOString().split("T")[0];
+    tags.push(`date:${startDateStr}`, `date:${endDateStr}`);
+
+    const today = new Date().toISOString().split("T")[0];
+    if (endDateStr === today) {
+      tags.push("realtime");
+    }
+
+    return tags;
+  }
+
+  /**
+   * Get cache statistics
+   */
+  async getCacheStats() {
+    return await cacheManager.getStats();
   }
 }

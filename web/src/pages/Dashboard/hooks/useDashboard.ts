@@ -5,10 +5,12 @@ import { IconCheck, IconX } from "@tabler/icons-react";
 import { isSameDay } from "date-fns";
 import { useAnalytics } from "@/features/analytics/hooks/useAnalytics";
 import { useAnalyticsStore } from "@/store/analyticsStore";
+import { useAuthStore } from "@/store/authStore";
 import { analyticsApi } from "@/shared/api/analytics";
 
 export const useDashboard = () => {
   const queryClient = useQueryClient();
+  const { currentUser } = useAuthStore();
   const { data, isLoading, error, isFetching } = useAnalytics();
   const { dateRange, groupBy, setDateRange, setGroupBy } = useAnalyticsStore();
 
@@ -104,7 +106,7 @@ export const useDashboard = () => {
   // Handle refresh with notifications
   const handleRefresh = useCallback(async () => {
     try {
-      await analyticsApi.clearCache();
+      await analyticsApi.clearCache(currentUser?.tenantId);
       await queryClient.invalidateQueries({ queryKey: ["analytics"] });
 
       notifications.show({
@@ -128,7 +130,7 @@ export const useDashboard = () => {
         autoClose: 7000,
       });
     }
-  }, [queryClient]);
+  }, [queryClient, currentUser?.tenantId]);
 
   // Computed values
   const hasValidDateRange = !!(dateRange.startDate && dateRange.endDate);

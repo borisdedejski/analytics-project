@@ -11,7 +11,6 @@ import {
   NumberInput,
   Badge,
   Alert,
-  TextInput,
   Grid,
   Paper,
 } from '@mantine/core';
@@ -30,6 +29,9 @@ import {
 import { eventsApi } from '@/shared/api/events';
 import { tenantsApi } from '@/shared/api/tenants';
 import { analyticsApi } from '@/shared/api/analytics';
+import { usersApi, User } from '@/shared/api/users';
+import { ApiError } from '@/shared/api/client';
+import { useAuthStore } from '@/store/authStore';
 import classes from './EventGenerator.module.scss';
 
 interface EventStats {
@@ -53,19 +55,31 @@ const getRandomItem = <T,>(arr: T[]): T => arr[Math.floor(Math.random() * arr.le
 
 export const EventGenerator = () => {
   const queryClient = useQueryClient();
+  const { currentUser } = useAuthStore();
   const [isGenerating, setIsGenerating] = useState(false);
   const [selectedEventType, setSelectedEventType] = useState<string>('click');
   const [numberOfEvents, setNumberOfEvents] = useState<number>(10);
-  const [userId, setUserId] = useState<string>('');
+  const [userId, setUserId] = useState<string>(currentUser?.id || '');
   const [customDate, setCustomDate] = useState<Date | null>(null);
   const [stats, setStats] = useState<EventStats>({ total: 0, byType: {} });
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-  const [tenantId, setTenantId] = useState<string | null>(null);
-  const [isLoadingTenant, setIsLoadingTenant] = useState(true);
+  const [tenantId, setTenantId] = useState<string | null>(currentUser?.tenantId || null);
+  const [isLoadingTenant, setIsLoadingTenant] = useState(!currentUser);
+  const [users, setUsers] = useState<User[]>([]);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
+  const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
 
-  // Fetch tenant on mount
+  // Fetch tenant on mount (use currentUser if available)
   useEffect(() => {
     const fetchTenant = async () => {
+      // If we have currentUser, use their tenantId
+      if (currentUser) {
+        setTenantId(currentUser.tenantId);
+        setUserId(currentUser.id);
+        setIsLoadingTenant(false);
+        return;
+      }
+
       try {
         const tenants = await tenantsApi.getTenants();
         if (tenants.length > 0) {
@@ -88,7 +102,52 @@ export const EventGenerator = () => {
     };
 
     fetchTenant();
-  }, []);
+  }, [currentUser]);
+
+  // Fetch users when tenant is loaded
+  useEffect(() => {
+    const fetchUsers = async () => {
+      if (!tenantId) return;
+      
+      setIsLoadingUsers(true);
+      try {
+        const fetchedUsers = await usersApi.getUsers(tenantId);
+        
+        // If currentUser exists, put them first in the list
+        if (currentUser) {
+          const otherUsers = fetchedUsers.filter((u) => u.id !== currentUser.id);
+          setUsers([currentUser, ...otherUsers]);
+          // Keep userId as currentUser's id
+          setUserId(currentUser.id);
+        } else {
+          setUsers(fetchedUsers);
+          // Default to first user or anonymous
+          if (fetchedUsers.length > 0) {
+            setUserId(fetchedUsers[0].id);
+          } else {
+            setUserId('');
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch users:', error);
+        // On error, use currentUser if available, otherwise anonymous
+        if (currentUser) {
+          setUsers([currentUser]);
+          setUserId(currentUser.id);
+        } else {
+          setUserId('');
+        }
+        setNotification({
+          type: 'error',
+          message: 'Failed to fetch users. Events will be created with your user.',
+        });
+      } finally {
+        setIsLoadingUsers(false);
+      }
+    };
+
+    fetchUsers();
+  }, [tenantId, currentUser]);
 
   const generateRandomEvent = () => {
     // Use custom date if provided, otherwise use current time
@@ -97,7 +156,7 @@ export const EventGenerator = () => {
     return {
       tenantId: tenantId || undefined,
       eventType: selectedEventType,
-      userId: userId || undefined, // Only send if explicitly provided
+      userId: userId && userId.trim() !== '' ? userId : undefined, // Only send if not empty
       sessionId: `session_${Math.random().toString(36).substring(7)}`,
       page: getRandomItem(PAGES),
       browser: getRandomItem(BROWSERS),
@@ -106,10 +165,79 @@ export const EventGenerator = () => {
       timestamp: eventDate.toISOString(),
       metadata: {
         randomValue: Math.floor(Math.random() * 1000),
-        // Store a random user identifier in metadata instead
-        userIdentifier: !userId ? `user_${Math.random().toString(36).substring(7)}` : undefined,
       },
     };
+  };
+
+  /**
+   * Process events in batches to avoid rate limiting
+   * @param events Array of events to create
+   * @param batchSize Number of events to process concurrently
+   * @param delayMs Delay between batches in milliseconds
+   */
+  const processBatchedEvents = async (
+    events: any[],
+    batchSize: number = 10,
+    delayMs: number = 100
+  ) => {
+    const results = [];
+    const total = events.length;
+    let retryCount = 0;
+    const maxRetries = 3;
+
+    for (let i = 0; i < events.length; i += batchSize) {
+      const batch = events.slice(i, i + batchSize);
+      
+      // Update progress
+      setProgress({ current: Math.min(i + batchSize, total), total });
+
+      let success = false;
+      let lastError: Error | null = null;
+
+      // Retry logic for this batch
+      while (!success && retryCount < maxRetries) {
+        try {
+          // Process batch in parallel
+          const batchResults = await Promise.all(
+            batch.map((event) => eventsApi.createEvent(event))
+          );
+          results.push(...batchResults);
+          success = true;
+
+          // Add delay between batches (except for the last batch)
+          if (i + batchSize < events.length) {
+            await new Promise((resolve) => setTimeout(resolve, delayMs));
+          }
+        } catch (error) {
+          lastError = error as Error;
+          
+          // If rate limited, wait and retry
+          if (error instanceof ApiError && error.status === 429) {
+            const waitTime = error.retryAfter ? error.retryAfter * 1000 : 2000;
+            console.log(`Rate limited, waiting ${waitTime / 1000} seconds before retry...`);
+            
+            retryCount++;
+            if (retryCount < maxRetries) {
+              await new Promise((resolve) => setTimeout(resolve, waitTime));
+            }
+          } else {
+            // For other errors, don't retry
+            throw error;
+          }
+        }
+      }
+
+      // If we exhausted all retries, throw the last error
+      if (!success && lastError) {
+        throw lastError;
+      }
+
+      // Reset retry count for next batch
+      retryCount = 0;
+    }
+
+    setProgress(null);
+    return results;
   };
 
   const generateEvents = async () => {
@@ -125,16 +253,17 @@ export const EventGenerator = () => {
     setNotification(null);
 
     try {
-      const promises = [];
+      const events = [];
       for (let i = 0; i < numberOfEvents; i++) {
         const event = generateRandomEvent();
         if (i === 0) {
           console.log('Sample event being generated:', event);
         }
-        promises.push(eventsApi.createEvent(event));
+        events.push(event);
       }
 
-      await Promise.all(promises);
+      // Process events in batches to avoid rate limiting
+      await processBatchedEvents(events, 10, 100);
 
       // Update stats
       setStats((prev) => ({
@@ -145,8 +274,8 @@ export const EventGenerator = () => {
         },
       }));
 
-      // Clear backend Redis cache
-      await analyticsApi.clearCache();
+      // Clear backend Redis cache (pass tenantId to ensure proper cache invalidation)
+      await analyticsApi.clearCache(tenantId || undefined);
       // Invalidate queries to trigger refetch
       queryClient.invalidateQueries({ queryKey: ['analytics'] });
 
@@ -163,6 +292,7 @@ export const EventGenerator = () => {
       });
     } finally {
       setIsGenerating(false);
+      setProgress(null);
     }
   };
 
@@ -179,7 +309,7 @@ export const EventGenerator = () => {
     setNotification(null);
 
     try {
-      const promises = [];
+      const events = [];
       const bulkCount = 50;
 
       for (let i = 0; i < bulkCount; i++) {
@@ -190,7 +320,7 @@ export const EventGenerator = () => {
         const event = {
           tenantId: tenantId || undefined,
           eventType: randomEventType,
-          userId: undefined, // Don't send random user IDs
+          userId: userId && userId.trim() !== '' ? userId : undefined, // Use selected user
           sessionId: `session_${Math.random().toString(36).substring(7)}`,
           page: getRandomItem(PAGES),
           browser: getRandomItem(BROWSERS),
@@ -199,21 +329,21 @@ export const EventGenerator = () => {
           timestamp: eventDate.toISOString(),
           metadata: {
             randomValue: Math.floor(Math.random() * 1000),
-            // Store a random user identifier in metadata instead
-            userIdentifier: `user_${Math.random().toString(36).substring(7)}`,
           },
         };
         if (i === 0) {
           console.log('Sample bulk event being generated:', event);
           console.log('Current tenantId:', tenantId);
+          console.log('Current userId:', userId);
         }
-        promises.push(eventsApi.createEvent(event));
+        events.push(event);
       }
 
-      await Promise.all(promises);
+      // Process events in batches to avoid rate limiting
+      await processBatchedEvents(events, 10, 100);
 
-      // Clear backend Redis cache
-      await analyticsApi.clearCache();
+      // Clear backend Redis cache (pass tenantId to ensure proper cache invalidation)
+      await analyticsApi.clearCache(tenantId || undefined);
       // Invalidate queries to trigger refetch
       queryClient.invalidateQueries({ queryKey: ['analytics'] });
 
@@ -230,6 +360,7 @@ export const EventGenerator = () => {
       });
     } finally {
       setIsGenerating(false);
+      setProgress(null);
     }
   };
 
@@ -308,13 +439,37 @@ export const EventGenerator = () => {
                     size="md"
                   />
 
-                  <TextInput
-                    label="User ID (Optional)"
-                    placeholder="Enter a valid user UUID (leave empty for anonymous events)"
+                  <Select
+                    label="User"
+                    placeholder={isLoadingUsers ? "Loading users..." : "Select a user"}
                     value={userId}
-                    onChange={(event) => setUserId(event.currentTarget.value)}
+                    onChange={(value) => setUserId(value || '')}
+                    data={[
+                      ...(users.length > 0
+                        ? [
+                            {
+                              value: users[0].id,
+                              label: `👤 ME (${users[0].email})`,
+                            },
+                            ...users.slice(1).map((user) => ({
+                              value: user.id,
+                              label: `${user.email} (${user.role})`,
+                            })),
+                          ]
+                        : []),
+                      {
+                        value: '',
+                        label: '🔓 Anonymous (no user)',
+                      },
+                    ]}
                     size="md"
-                    description="Must be a valid UUID from the users table"
+                    disabled={isLoadingUsers || users.length === 0}
+                    description={
+                      users.length === 0
+                        ? 'No users found. Events will be anonymous.'
+                        : 'Select a user to associate with events. Defaults to ME (you).'
+                    }
+                    clearable={false}
                   />
 
                   <DateInput
@@ -330,6 +485,12 @@ export const EventGenerator = () => {
                   />
                 </Stack>
               </div>
+
+              {progress && (
+                <Alert icon={<IconRocket />} title="Generating Events" color="blue">
+                  Processing {progress.current} of {progress.total} events...
+                </Alert>
+              )}
 
               <Group gap="sm">
                 <Button
@@ -433,19 +594,22 @@ export const EventGenerator = () => {
             </Text>
             <Stack gap="xs">
               <Text size="sm" c="dimmed">
-                1. Select an event type and quantity
+                1. Events default to "ME" (your user)
               </Text>
               <Text size="sm" c="dimmed">
-                2. Optionally set a custom date for events
+                2. Select an event type and quantity
               </Text>
               <Text size="sm" c="dimmed">
-                3. Click "Generate Events" to create them
+                3. Optionally set a custom date or different user
               </Text>
               <Text size="sm" c="dimmed">
-                4. Navigate to Dashboard to see real-time updates
+                4. Click "Generate Events" to create them
               </Text>
               <Text size="sm" c="dimmed">
-                5. Events include random identifiers, devices, browsers, and pages
+                5. Navigate to Dashboard to see real-time updates
+              </Text>
+              <Text size="sm" c="dimmed">
+                6. Events include random devices, browsers, and pages
               </Text>
             </Stack>
           </Card>

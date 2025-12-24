@@ -1,42 +1,50 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
 // Regions and plans for tenant diversity
-const REGIONS = ['us-east-1', 'us-west-2', 'eu-west-1', 'eu-central-1', 'ap-southeast-1', 'ap-northeast-1'];
-const PLANS = ['free', 'pro', 'enterprise'];
-const ROLES = ['admin', 'user', 'viewer'];
+const REGIONS = [
+  "us-east-1",
+  "us-west-2",
+  "eu-west-1",
+  "eu-central-1",
+  "ap-southeast-1",
+  "ap-northeast-1",
+];
+const PLANS = ["free", "pro", "enterprise"];
+const ROLES = ["admin", "user", "viewer"];
 const EVENT_TYPES = [
-  'page_view',
-  'button_click',
-  'filter_applied',
-  'dashboard_loaded',
-  'export_csv',
-  'login',
-  'logout',
-  'search',
-  'form_submit',
+  "page_view",
+  "button_click",
+  "filter_applied",
+  "dashboard_loaded",
+  "export_csv",
+  "login",
+  "logout",
+  "search",
+  "form_submit",
 ];
 const PAGES = [
-  '/dashboard',
-  '/analytics',
-  '/reports',
-  '/settings',
-  '/users',
-  '/billing',
-  '/api-keys',
-  '/documentation',
+  "/dashboard",
+  "/analytics",
+  "/reports",
+  "/settings",
+  "/users",
+  "/billing",
+  "/api-keys",
+  "/documentation",
 ];
-const DEVICES = ['desktop', 'mobile', 'tablet'];
-const COUNTRIES = ['US', 'UK', 'DE', 'FR', 'JP', 'IN', 'BR', 'CA', 'AU', 'SG'];
-const SERVICES = ['api', 'worker', 'frontend'];
+const DEVICES = ["desktop", "mobile", "tablet"];
+const BROWSERS = ["Chrome", "Firefox", "Safari", "Edge"];
+const COUNTRIES = ["US", "UK", "DE", "FR", "JP", "IN", "BR", "CA", "AU", "SG"];
+const SERVICES = ["api", "worker", "frontend"];
 const METRIC_NAMES = [
-  'api_latency_ms_p95',
-  'api_latency_ms_p99',
-  'error_rate',
-  'cpu_usage',
-  'memory_mb',
-  'requests_per_sec',
+  "api_latency_ms_p95",
+  "api_latency_ms_p99",
+  "error_rate",
+  "cpu_usage",
+  "memory_mb",
+  "requests_per_sec",
 ];
 
 /**
@@ -57,7 +65,7 @@ function randomPick<T>(arr: T[]): T {
  * Generate random email
  */
 function randomEmail(index: number): string {
-  const domains = ['example.com', 'test.com', 'demo.com', 'acme.co'];
+  const domains = ["example.com", "test.com", "demo.com", "acme.co"];
   return `user${index}@${randomPick(domains)}`;
 }
 
@@ -80,21 +88,19 @@ function getHourMultiplier(hour: number): number {
  * Main seeding function
  */
 async function main() {
-  console.log('🌱 Starting seed...');
-
-  // Clear existing data (optional - comment out if you want to preserve data)
-  console.log('🗑️  Clearing existing data...');
   try {
     await prisma.metric.deleteMany({});
     await prisma.event.deleteMany({});
     await prisma.user.deleteMany({});
     await prisma.tenant.deleteMany({});
   } catch (error) {
-    console.log('⚠️  Could not clear existing data (tables might be empty):', error.message);
+    console.log(
+      "⚠️  Could not clear existing data (tables might be empty):",
+      error.message
+    );
   }
 
   // 1. Create 10 tenants
-  console.log('👥 Creating tenants...');
   const tenants = await Promise.all(
     Array.from({ length: 10 }, async (_, i) => {
       return prisma.tenant.create({
@@ -106,11 +112,22 @@ async function main() {
       });
     })
   );
-  console.log(`✅ Created ${tenants.length} tenants`);
 
-  // 2. Create users for each tenant (200-2000 users per tenant)
-  console.log('👤 Creating users...');
   const allUsers: any[] = [];
+
+  // Create a special user for Boris in the first tenant
+  const borisUser = await prisma.user.create({
+    data: {
+      tenantId: tenants[0].id,
+      email: "borisdedejski@gmail.com",
+      role: "admin",
+    },
+  });
+  allUsers.push(borisUser);
+  console.log(
+    `  ✅ Created special user: borisdedejski@gmail.com (admin) in ${tenants[0].name}`
+  );
+
   for (const tenant of tenants) {
     const userCount = randomInt(200, 2000);
     const users = await Promise.all(
@@ -130,7 +147,7 @@ async function main() {
   console.log(`✅ Total users created: ${allUsers.length}`);
 
   // 3. Generate events for last 7 days with realistic spikes
-  console.log('📊 Generating events for last 7 days...');
+  console.log("📊 Generating events for last 7 days...");
   const now = new Date();
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
@@ -139,11 +156,13 @@ async function main() {
 
   for (const tenant of tenants) {
     const tenantUsers = allUsers.filter((u) => u.tenantId === tenant.id);
-    
+
     // Generate events day by day
     for (let day = 0; day < 7; day++) {
-      const dayStart = new Date(sevenDaysAgo.getTime() + day * 24 * 60 * 60 * 1000);
-      
+      const dayStart = new Date(
+        sevenDaysAgo.getTime() + day * 24 * 60 * 60 * 1000
+      );
+
       // Generate events hour by hour
       for (let hour = 0; hour < 24; hour++) {
         const hourStart = new Date(dayStart.getTime() + hour * 60 * 60 * 1000);
@@ -153,34 +172,45 @@ async function main() {
         const eventBatch = [];
         for (let e = 0; e < eventsThisHour; e++) {
           const eventTime = new Date(
-            hourStart.getTime() + randomInt(0, 59) * 60 * 1000 + randomInt(0, 59) * 1000
+            hourStart.getTime() +
+              randomInt(0, 59) * 60 * 1000 +
+              randomInt(0, 59) * 1000
           );
           const user = randomPick(tenantUsers);
           const sessionId = `session_${user.id}_${day}_${hour}`;
           const eventType = randomPick(EVENT_TYPES);
           const page = randomPick(PAGES);
           const device = randomPick(DEVICES);
+          const browser = randomPick(BROWSERS);
           const country = randomPick(COUNTRIES);
 
+          // Cast metadata to Prisma.JsonObject to satisfy type checking
           eventBatch.push({
             tenantId: tenant.id,
             userId: user.id,
-            sessionId,
-            eventType,
+            sessionId: sessionId,
+            eventType: eventType,
             timestamp: eventTime,
             metadata: {
               page,
               device,
+              browser,
               country,
-              feature: eventType === 'button_click' ? `${page.replace('/', '')}_action` : undefined,
-              button: eventType === 'button_click' ? randomPick(['submit', 'export', 'filter', 'refresh']) : undefined,
-              value: eventType === 'export_csv' ? randomInt(10, 1000) : undefined,
-            },
+              feature:
+                eventType === "button_click"
+                  ? `${page.replace("/", "")}_action`
+                  : null,
+              button:
+                eventType === "button_click"
+                  ? randomPick(["submit", "export", "filter", "refresh"])
+                  : null,
+              value: eventType === "export_csv" ? randomInt(10, 1000) : null,
+            } as import('@prisma/client').Prisma.JsonObject, // use correct type for Prisma.JsonObject
           });
 
           // Insert in batches
           if (eventBatch.length >= BATCH_SIZE) {
-            await prisma.event.createMany({ data: eventBatch });
+            await prisma.event.createMany({ data: eventBatch as any }); // (cast as any to handle batch typing)
             totalEvents += eventBatch.length;
             eventBatch.length = 0;
           }
@@ -192,22 +222,26 @@ async function main() {
           totalEvents += eventBatch.length;
         }
       }
-      console.log(`  ✅ Generated events for ${tenant.name} - Day ${day + 1}/7`);
+      console.log(
+        `  ✅ Generated events for ${tenant.name} - Day ${day + 1}/7`
+      );
     }
   }
   console.log(`✅ Total events created: ${totalEvents}`);
 
   // 4. Generate metrics for last 24 hours (every minute)
-  console.log('📈 Generating metrics for last 24 hours...');
+  console.log("📈 Generating metrics for last 24 hours...");
   const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-  
+
   let totalMetrics = 0;
   for (const tenant of tenants) {
     const metricBatch = [];
 
     // Generate metrics for each minute in the last 24 hours
     for (let minute = 0; minute < 24 * 60; minute++) {
-      const metricTime = new Date(twentyFourHoursAgo.getTime() + minute * 60 * 1000);
+      const metricTime = new Date(
+        twentyFourHoursAgo.getTime() + minute * 60 * 1000
+      );
       const hour = metricTime.getHours();
       const isHighTraffic = hour >= 9 && hour <= 18;
 
@@ -220,22 +254,22 @@ async function main() {
           const hasSpike = Math.random() < 0.05; // 5% chance of spike
 
           switch (metricName) {
-            case 'api_latency_ms_p95':
+            case "api_latency_ms_p95":
               value = hasSpike ? randomInt(800, 2000) : randomInt(50, 200);
               break;
-            case 'api_latency_ms_p99':
+            case "api_latency_ms_p99":
               value = hasSpike ? randomInt(1500, 3000) : randomInt(100, 400);
               break;
-            case 'error_rate':
+            case "error_rate":
               value = hasSpike ? randomInt(5, 20) : Math.random() * 2; // 0-2% normal, 5-20% spike
               break;
-            case 'cpu_usage':
+            case "cpu_usage":
               value = isHighTraffic ? randomInt(40, 80) : randomInt(10, 40);
               break;
-            case 'memory_mb':
+            case "memory_mb":
               value = randomInt(500, 2000);
               break;
-            case 'requests_per_sec':
+            case "requests_per_sec":
               value = isHighTraffic ? randomInt(50, 500) : randomInt(5, 50);
               break;
             default:
@@ -269,8 +303,8 @@ async function main() {
   }
   console.log(`✅ Total metrics created: ${totalMetrics}`);
 
-  console.log('🎉 Seeding completed successfully!');
-  console.log('\n📊 Summary:');
+  console.log("🎉 Seeding completed successfully!");
+  console.log("\n📊 Summary:");
   console.log(`  - Tenants: ${tenants.length}`);
   console.log(`  - Users: ${allUsers.length}`);
   console.log(`  - Events: ${totalEvents}`);
@@ -279,10 +313,9 @@ async function main() {
 
 main()
   .catch((e) => {
-    console.error('❌ Error seeding database:', e);
+    console.error("❌ Error seeding database:", e);
     process.exit(1);
   })
   .finally(async () => {
     await prisma.$disconnect();
   });
-

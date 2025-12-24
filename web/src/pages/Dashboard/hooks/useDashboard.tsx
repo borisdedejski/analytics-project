@@ -3,16 +3,20 @@ import { useQueryClient } from '@tanstack/react-query';
 import { format, addDays, isSameDay } from 'date-fns';
 import { useAnalytics } from '@/features/analytics/hooks/useAnalytics';
 import { useAnalyticsStore } from '@/store/analyticsStore';
-import { analyticsApi } from '@/shared/api/analytics';
+import { useAuthStore } from '@/store/authStore';
+import { analyticsApi, ValidationError } from '@/shared/api/analytics';
+import type { AnalyticsSummaryDto } from '@/types/generated/analytics.dto.zod';
 
 interface UseDashboardOptions {
   onSuccess?: () => void;
   onError?: (error: Error) => void;
+  onValidationError?: (error: ValidationError) => void;
 }
 
 export const useDashboard = (options?: UseDashboardOptions) => {
-  const { onSuccess, onError } = options || {};
+  const { onSuccess, onError, onValidationError } = options || {};
   const queryClient = useQueryClient();
+  const { currentUser } = useAuthStore();
   const { dateRange, groupBy, setDateRange, setGroupBy } = useAnalyticsStore();
   
   const [localDateRange, setLocalDateRange] = useState<[Date | null, Date | null]>([
@@ -31,10 +35,16 @@ export const useDashboard = (options?: UseDashboardOptions) => {
     return { startDate, endDate };
   }, [dateRange.startDate, dateRange.endDate]);
 
-  const { data, isLoading, error, isFetching } = useAnalytics({
+  const handleValidationError = useCallback((error: ValidationError) => {
+    onValidationError?.(error);
+    onError?.(error);
+  }, [onValidationError, onError]);
+
+  const { data, isLoading, error, isFetching, hasValidData } = useAnalytics({
     startDate: formattedDates.startDate,
     endDate: formattedDates.endDate,
     groupBy,
+    onValidationError: handleValidationError,
   });
 
   useEffect(() => {
@@ -63,36 +73,40 @@ export const useDashboard = (options?: UseDashboardOptions) => {
 
   const fetchAnalytics = useCallback(async () => {
     try {
-      await analyticsApi.clearCache();
+      await analyticsApi.clearCache(currentUser?.tenantId);
       await queryClient.invalidateQueries({ queryKey: ['analytics'] });
       onSuccess?.();
     } catch (error) {
       onError?.(error as Error);
     }
-  }, [queryClient, onSuccess, onError]);
+  }, [queryClient, currentUser?.tenantId, onSuccess, onError]);
 
   const hasValidDateRange = !!(dateRange.startDate && dateRange.endDate);
   const isSingleDay = !!(dateRange.startDate && dateRange.endDate && 
     isSameDay(dateRange.startDate, dateRange.endDate));
 
+  const validatedData: AnalyticsSummaryDto | undefined = hasValidData ? data : undefined;
+
+  useEffect(() => {
+    if (data && hasValidData) {
+    }
+  }, [data, hasValidData]);
+
   return {
-    // Data
-    data,
+    data: validatedData,
     isLoading,
     error,
     isFetching,
+    hasValidData,
     
-    // State
     dateRange,
     localDateRange,
     groupBy,
     
-    // Handlers
     handleDateRangeChange,
     handleGroupByChange,
     fetchAnalytics,
     
-    // Computed
     hasValidDateRange,
     isSingleDay,
   };

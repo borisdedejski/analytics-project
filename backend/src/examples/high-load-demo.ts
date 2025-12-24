@@ -58,7 +58,7 @@ async function simulateTrafficSpike() {
         },
         validateStatus: () => true, // Don't throw on 4xx/5xx
       })
-      .then((res) => ({ status: res.status, success: res.status < 400 }))
+      .then((res: any) => ({ status: res.status, success: res.status < 400 }))
       .catch(() => ({ status: 0, success: false }));
 
     requests.push(request);

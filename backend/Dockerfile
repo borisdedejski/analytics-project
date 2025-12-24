@@ -6,8 +6,11 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y openssl libssl-dev && rm -rf /var/lib/apt/lists/*
 
 COPY package*.json ./
+COPY scripts ./scripts
+COPY prisma ./prisma
 
-RUN npm install
+# Skip postinstall during build to avoid type generation without DATABASE_URL
+RUN npm install --ignore-scripts
 
 COPY . .
 

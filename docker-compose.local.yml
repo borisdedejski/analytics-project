@@ -44,8 +44,10 @@ services:
       DB_USER: analytics_user
       DB_PASSWORD: analytics_pass
       DB_NAME: analytics_db
+      DATABASE_URL: postgresql://analytics_user:analytics_pass@postgres:5432/analytics_db
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      REDIS_URL: redis://redis:6379
       CORS_ORIGIN: http://localhost:5173
     depends_on:
       postgres:

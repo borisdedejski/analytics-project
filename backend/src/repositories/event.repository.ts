@@ -1,5 +1,5 @@
 import { PrismaClient, Prisma } from "@prisma/client";
-import { CreateEventDto, EventsQueryDto } from "../dtos/event.dto";
+import { CreateEventDto, EventsQueryDto } from "../dtos";
 
 const prisma = new PrismaClient();
 

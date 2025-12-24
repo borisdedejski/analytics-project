@@ -3,7 +3,7 @@ import {
   CreateEventDto,
   EventResponseDto,
   EventsQueryDto,
-} from "../dtos/event.dto";
+} from "../dtos";
 import cacheManager from "./cache-manager.service";
 
 export class EventService {

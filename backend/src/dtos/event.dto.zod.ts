@@ -7,7 +7,7 @@ export const CreateEventDtoSchema = z.object({
   userId: z.string().optional(),
   sessionId: z.string().optional(),
   timestamp: z.union([z.string(), z.date()]).optional(),
-  metadata: z.record(z.any()).optional(),
+  metadata: z.record(z.string(), z.any()).optional(),
   page: z.string().optional(),
   browser: z.string().optional(),
   device: z.string().optional(),
@@ -22,7 +22,7 @@ export const EventResponseDtoSchema = z.object({
   eventType: z.string(),
   userId: z.string().optional(),
   sessionId: z.string().optional(),
-  metadata: z.record(z.any()).optional(),
+  metadata: z.record(z.string(), z.any()).optional(),
   page: z.string().optional(),
   browser: z.string().optional(),
   device: z.string().optional(),
@@ -34,6 +34,7 @@ export type EventResponseDto = z.infer<typeof EventResponseDtoSchema>;
 
 // Events Query DTO
 export const EventsQueryDtoSchema = z.object({
+  tenantId: z.string().optional(),
   startDate: z.string().optional(),
   endDate: z.string().optional(),
   eventType: z.string().optional(),

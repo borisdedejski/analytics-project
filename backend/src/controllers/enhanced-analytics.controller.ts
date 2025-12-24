@@ -78,14 +78,7 @@ export class EnhancedAnalyticsController {
           );
 
           if (cachedData) {
-            return {
-              ...cachedData,
-              _metadata: {
-                cached: true,
-                stale: true,
-                message: "Returning cached data due to high load",
-              },
-            };
+            return cachedData;
           }
 
           // Last resort: return empty data structure
@@ -96,10 +89,6 @@ export class EnhancedAnalyticsController {
             timeSeriesData: [],
             topPages: [],
             deviceStats: [],
-            _metadata: {
-              error: true,
-              message: "Service temporarily unavailable",
-            },
           };
         }
       );

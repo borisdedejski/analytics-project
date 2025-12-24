@@ -1,5 +1,5 @@
 import { EventRepository } from "../repositories/event.repository";
-import { AnalyticsQueryDto, AnalyticsSummaryDto } from "../dtos/analytics.dto";
+import { AnalyticsQueryDto, AnalyticsSummaryDto } from "../dtos";
 import cacheManager from "./cache-manager.service";
 
 /**
@@ -96,7 +96,12 @@ export class AnalyticsService {
       this.eventRepository.getTotalCount(startDate, endDate, tenantId),
       this.eventRepository.getUniqueUserCount(startDate, endDate, tenantId),
       this.eventRepository.getEventCountByType(startDate, endDate, tenantId),
-      this.eventRepository.getTimeSeriesData(startDate, endDate, groupBy, tenantId),
+      this.eventRepository.getTimeSeriesData(
+        startDate,
+        endDate,
+        groupBy,
+        tenantId
+      ),
       this.eventRepository.getTopPages(startDate, endDate, 10, tenantId),
       this.eventRepository.getDeviceStats(startDate, endDate, tenantId),
     ]);

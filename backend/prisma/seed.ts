@@ -205,7 +205,7 @@ async function main() {
                   ? randomPick(["submit", "export", "filter", "refresh"])
                   : null,
               value: eventType === "export_csv" ? randomInt(10, 1000) : null,
-            } as import('@prisma/client').Prisma.JsonObject, // use correct type for Prisma.JsonObject
+            } as import("@prisma/client").Prisma.JsonObject, // use correct type for Prisma.JsonObject
           });
 
           // Insert in batches

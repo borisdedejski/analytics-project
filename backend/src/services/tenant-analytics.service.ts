@@ -8,7 +8,7 @@ import {
   MetricTimeSeriesDto,
   TimeSeriesPoint,
   EventTypeCount,
-} from '../dtos/tenant-analytics.dto';
+} from '../dtos';
 
 const prisma = new PrismaClient();
 

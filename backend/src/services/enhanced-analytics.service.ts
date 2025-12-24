@@ -9,7 +9,7 @@
 
 import { PrismaClient } from "@prisma/client";
 import { EventRepository } from "../repositories/event.repository";
-import { AnalyticsQueryDto, AnalyticsSummaryDto } from "../dtos/analytics.dto";
+import { AnalyticsQueryDto, AnalyticsSummaryDto } from "../dtos";
 import redisClient from "../config/redis";
 
 const prisma = new PrismaClient();

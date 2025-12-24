@@ -1,0 +1,21 @@
+.controls {
+  margin-bottom: 2rem;
+}
+
+.controlsGroup {
+  align-items: flex-end;
+}
+
+.dateInput {
+  min-width: 300px;
+}
+
+.groupBySelect {
+  min-width: 150px;
+}
+
+.refreshButton {
+  display: flex;
+  flex-direction: column;
+}
+

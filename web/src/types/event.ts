@@ -3,13 +3,13 @@ import { z } from 'zod';
 export const EventSchema = z.object({
   id: z.string(),
   eventType: z.string(),
-  userId: z.string().optional(),
-  sessionId: z.string().optional(),
-  metadata: z.record(z.any()).optional(),
-  page: z.string().optional(),
-  browser: z.string().optional(),
-  device: z.string().optional(),
-  country: z.string().optional(),
+  userId: z.string().nullable().optional(),
+  sessionId: z.string().nullable().optional(),
+  metadata: z.record(z.any()).nullable().optional(),
+  page: z.string().nullable().optional(),
+  browser: z.string().nullable().optional(),
+  device: z.string().nullable().optional(),
+  country: z.string().nullable().optional(),
   timestamp: z.string(),
 });
 
@@ -24,9 +24,11 @@ export type Event = z.infer<typeof EventSchema>;
 export type EventsResponse = z.infer<typeof EventsResponseSchema>;
 
 export interface CreateEventPayload {
+  tenantId?: string;
   eventType: string;
   userId?: string;
   sessionId?: string;
+  timestamp?: string;
   metadata?: Record<string, any>;
   page?: string;
   browser?: string;

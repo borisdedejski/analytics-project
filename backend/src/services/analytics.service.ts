@@ -17,23 +17,50 @@ export class AnalyticsService {
   }
 
   /**
+   * Clear all analytics cache
+   */
+  async clearCache(): Promise<void> {
+    const keys = await redisClient.keys('analytics:summary:*');
+    if (keys.length > 0) {
+      await Promise.all(keys.map(key => redisClient.del(key)));
+    }
+  }
+
+  /**
    * Get analytics summary - now powered by Prisma
    */
   async getAnalyticsSummary(
-    query: AnalyticsQueryDto
+    query: AnalyticsQueryDto,
+    skipCache: boolean = false
   ): Promise<AnalyticsSummaryDto> {
     const cacheKey = `analytics:summary:${query.startDate}:${query.endDate}:${
       query.groupBy || "day"
     }`;
 
-    const cached = await redisClient.get(cacheKey);
-    if (cached) {
-      return JSON.parse(cached);
+    // Check cache only if not skipping
+    if (!skipCache) {
+      const cached = await redisClient.get(cacheKey);
+      if (cached) {
+        console.log('Returning cached analytics data');
+        return JSON.parse(cached);
+      }
+    } else {
+      console.log('Skipping cache, fetching fresh data');
     }
 
-    const startDate = new Date(query.startDate);
-    const endDate = new Date(query.endDate);
+    // Parse dates as UTC to avoid timezone issues
+    // Adding 'T00:00:00Z' ensures consistent UTC parsing
+    const startDate = new Date(query.startDate + 'T00:00:00Z');
+    const endDate = new Date(query.endDate + 'T00:00:00Z');
     const groupBy = query.groupBy || "day";
+
+    console.log('Analytics Service - Date Processing:', {
+      queryStartDate: query.startDate,
+      queryEndDate: query.endDate,
+      parsedStartDate: startDate.toISOString(),
+      parsedEndDate: endDate.toISOString(),
+      groupBy
+    });
 
     const [
       totalEvents,

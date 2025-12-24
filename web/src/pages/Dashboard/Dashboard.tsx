@@ -1,104 +1,80 @@
-import { Container, Title, Text, Loader, Alert, Select, Group } from '@mantine/core';
-import { DatePickerInput } from '@mantine/dates';
-import { IconActivity, IconUsers, IconChartLine, IconAlertCircle } from '@tabler/icons-react';
-import { useAnalytics } from '@/features/analytics/hooks/useAnalytics';
-import { useAnalyticsStore } from '@/store/analyticsStore';
-import { StatCard } from '@/features/analytics/components/StatCard/StatCard';
-import { EventsChart } from '@/features/analytics/components/EventsChart/EventsChart';
-import { EventTypesPie } from '@/features/analytics/components/EventTypesPie/EventTypesPie';
-import { TopPagesTable } from '@/features/analytics/components/TopPagesTable/TopPagesTable';
-import { DeviceStats } from '@/features/analytics/components/DeviceStats/DeviceStats';
+import { useCallback } from 'react';
+import { Container } from '@mantine/core';
+import { Notifications, notifications } from '@mantine/notifications';
+import { IconCheck, IconX } from '@tabler/icons-react';
+import { DataStateHandler } from '@/shared/components/DataStateHandler/DataStateHandler';
+import { DashboardHeader } from './components/DashboardHeader/DashboardHeader';
+import { DashboardControls } from './components/DashboardControls/DashboardControls';
+import { DashboardContent } from './components/DashboardContent/DashboardContent';
+import { useDashboard } from './hooks/useDashboard.tsx';
 import classes from './Dashboard.module.scss';
 
 export const Dashboard = () => {
-  const { data, isLoading, error } = useAnalytics();
-  const { dateRange, groupBy, setDateRange, setGroupBy } = useAnalyticsStore();
-
-  if (isLoading) {
-    return (
-      <div className={classes.loading}>
-        <Loader size="xl" />
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <Container className={classes.container}>
-        <Alert icon={<IconAlertCircle />} title="Error" color="red" className={classes.error}>
-          Failed to load analytics data. Please try again later.
-        </Alert>
-      </Container>
-    );
-  }
-
-  if (!data) {
-    return null;
-  }
+  const {
+    data,
+    isLoading,
+    error,
+    isFetching,
+    
+    dateRange,
+    localDateRange,
+    groupBy,
+    
+    handleDateRangeChange,
+    handleGroupByChange,
+    fetchAnalytics,
+    
+    hasValidDateRange,
+    isSingleDay,
+  } = useDashboard({
+    onSuccess: useCallback(() => {
+      notifications.show({
+        title: 'Success',
+        message: 'Analytics data refreshed successfully',
+        color: 'green',
+        icon: <IconCheck size={18} />,
+        autoClose: 3000,
+      });
+    }, []),
+    onError: useCallback((error: Error) => {
+      notifications.show({
+        title: 'Analytics Failed',
+        message: error.message || 'Failed to load analytics data. Please try again.',
+        color: 'red',
+        icon: <IconX size={18} />,
+        autoClose: 7000,
+      });
+    }, []),
+  });
 
   return (
-    <Container className={classes.container} size="xl">
-      <div className={classes.header}>
-        <Title className={classes.title}>Analytics Dashboard</Title>
-        <Text className={classes.subtitle}>Real-time insights and metrics</Text>
-      </div>
+    <>
+      <Notifications position="top-right" zIndex={1000} />
+      <DataStateHandler isLoading={isLoading} error={error as Error | null}>
+        <Container className={classes.container} size="xl">
+          <DashboardHeader
+            isSingleDay={isSingleDay}
+            dateStart={dateRange.startDate}
+            isFetching={isFetching}
+            isLoading={isLoading}
+          />
 
-      <div className={classes.controls}>
-        <DatePickerInput
-          type="range"
-          label="Date Range"
-          placeholder="Pick dates range"
-          value={[dateRange.startDate, dateRange.endDate]}
-          onChange={(value) => {
-            if (value[0] && value[1]) {
-              setDateRange({ startDate: value[0], endDate: value[1] });
-            }
-          }}
-        />
-        <Select
-          label="Group By"
-          value={groupBy}
-          onChange={(value) => setGroupBy(value as any)}
-          data={[
-            { value: 'hour', label: 'Hour' },
-            { value: 'day', label: 'Day' },
-            { value: 'week', label: 'Week' },
-            { value: 'month', label: 'Month' },
-          ]}
-        />
-      </div>
+          <DashboardControls
+            localDateRange={localDateRange}
+            groupBy={groupBy}
+            isFetching={isFetching}
+            onDateRangeChange={handleDateRangeChange}
+            onGroupByChange={handleGroupByChange}
+            onRefresh={fetchAnalytics}
+          />
 
-      <div className={classes.stats}>
-        <StatCard
-          title="Total Events"
-          value={data.totalEvents.toLocaleString()}
-          icon={<IconActivity size={32} />}
-          color="blue"
-        />
-        <StatCard
-          title="Unique Users"
-          value={data.uniqueUsers.toLocaleString()}
-          icon={<IconUsers size={32} />}
-          color="cyan"
-        />
-        <StatCard
-          title="Event Types"
-          value={data.eventsByType.length}
-          icon={<IconChartLine size={32} />}
-          color="violet"
-        />
-      </div>
-
-      <div className={classes.charts}>
-        <EventsChart data={data.timeSeriesData} />
-        <EventTypesPie data={data.eventsByType} />
-      </div>
-
-      <div className={classes.tables}>
-        <TopPagesTable data={data.topPages} />
-        <DeviceStats data={data.deviceStats} />
-      </div>
-    </Container>
+          <DashboardContent
+            hasValidDateRange={hasValidDateRange}
+            data={data}
+          />
+        </Container>
+      </DataStateHandler>
+    </>
   );
 };
 

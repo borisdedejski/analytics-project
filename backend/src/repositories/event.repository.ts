@@ -17,20 +17,40 @@ export class EventRepository {
     // For backward compatibility, we need to handle the old Event structure
     // We'll create a basic event and potentially migrate to the new structure
 
-    // If the event doesn't have a tenantId, we can use a default or skip
-    // For now, let's create with available data
+    // Validate that tenantId is provided
+    if (!data.tenantId) {
+      throw new Error('tenantId is required to create an event');
+    }
+
+    // Verify tenant exists
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: data.tenantId },
+    });
+
+    if (!tenant) {
+      throw new Error(`Tenant with ID ${data.tenantId} not found. Please seed the database first.`);
+    }
+    
+    // Only use userId if it's a valid UUID format, otherwise store in metadata
+    const isValidUUID = data.userId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data.userId);
+
+    // Use provided timestamp or default to current time
+    const eventTimestamp = data.timestamp ? new Date(data.timestamp) : new Date();
+
     const event = await prisma.event.create({
       data: {
-        tenantId: data.tenantId || "default-tenant", // You might want to handle this differently
-        userId: data.userId || null,
+        tenantId: data.tenantId,
+        userId: isValidUUID ? data.userId : null, // Only set if it's a valid UUID
         sessionId: data.sessionId || `session_${Date.now()}`,
         eventType: data.eventType,
-        timestamp: new Date(),
+        timestamp: eventTimestamp,
         metadata: {
           page: data.page,
           browser: data.browser,
           device: data.device,
           country: data.country,
+          // Store the user identifier in metadata if not a valid UUID
+          userIdentifier: !isValidUUID ? data.userId : undefined,
           ...data.metadata,
         },
       },
@@ -56,9 +76,10 @@ export class EventRepository {
     const where: any = {};
 
     if (startDate && endDate) {
+      // Parse dates as UTC to avoid timezone issues
       where.timestamp = {
-        gte: new Date(startDate),
-        lte: new Date(endDate),
+        gte: new Date(startDate + 'T00:00:00Z'),
+        lte: new Date(endDate + 'T00:00:00Z'),
       };
     }
     if (eventType) {
@@ -215,7 +236,12 @@ export class EventRepository {
    * Get total event count in date range
    */
   async getTotalCount(startDate: Date, endDate: Date): Promise<number> {
-    return await prisma.event.count({
+    console.log('EventRepository.getTotalCount - Query params:', {
+      startDate: startDate.toISOString(),
+      endDate: endDate.toISOString(),
+    });
+
+    const count = await prisma.event.count({
       where: {
         timestamp: {
           gte: startDate,
@@ -223,5 +249,8 @@ export class EventRepository {
         },
       },
     });
+
+    console.log('EventRepository.getTotalCount - Result:', count);
+    return count;
   }
 }

@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 
 interface DateRange {
-  startDate: Date;
-  endDate: Date;
+  startDate: Date | null;
+  endDate: Date | null;
 }
 
 interface AnalyticsStore {

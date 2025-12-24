@@ -37,3 +37,4 @@ echo "   npm run dev"
 echo ""
 echo "To stop backend: docker-compose -f docker-compose.local.yml down"
 
+

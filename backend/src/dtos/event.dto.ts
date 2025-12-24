@@ -3,6 +3,7 @@ export interface CreateEventDto {
   eventType: string;
   userId?: string;
   sessionId?: string;
+  timestamp?: string | Date; // Allow custom timestamp
   metadata?: Record<string, any>;
   page?: string;
   browser?: string;

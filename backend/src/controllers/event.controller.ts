@@ -13,7 +13,9 @@ export class EventController {
       const event = await this.eventService.createEvent(req.body);
       res.status(201).json(event);
     } catch (error) {
-      res.status(500).json({ error: 'Failed to create event' });
+      console.error('Error creating event:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to create event';
+      res.status(500).json({ error: errorMessage });
     }
   };
 

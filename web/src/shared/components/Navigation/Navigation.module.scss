@@ -1,0 +1,65 @@
+.navigation {
+  background: white;
+  border-bottom: 1px solid #e9ecef;
+  padding: 1rem 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.navGroup {
+  display: flex;
+  align-items: center;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  font-weight: 700;
+  font-size: 1.2rem;
+  color: var(--mantine-color-blue-6);
+}
+
+.logoText {
+  @media (max-width: 576px) {
+    display: none;
+  }
+}
+
+.desktopNav {
+  @media (max-width: 768px) {
+    display: none;
+  }
+}
+
+.burger {
+  display: none;
+
+  @media (max-width: 768px) {
+    display: block;
+  }
+}
+
+.navButton {
+  transition: all 0.2s ease;
+
+  &:hover {
+    transform: translateY(-2px);
+  }
+}
+
+.drawer {
+  .drawerContent {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding-top: 1rem;
+
+    button {
+      width: 100%;
+      justify-content: flex-start;
+    }
+  }
+}
+

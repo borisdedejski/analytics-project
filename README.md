@@ -236,4 +236,4 @@ docker exec -it analytics-redis redis-cli
 
 ---
 
-**Built with ❤️ for the Senior Full-Stack Engineer position**
+**Built with ❤️**
